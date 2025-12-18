@@ -2,13 +2,66 @@
 
 #include "GL/gl3w.h"
 
-typedef struct
+const float cube_vertices[] =
 {
+	-1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f,  1.0f, -1.0f,
+	 1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+
+	-1.0f, -1.0f,  1.0f,
+	 1.0f, -1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+	-1.0f, -1.0f,  1.0f,
+
+	-1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+
+	-1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f,  1.0f,
+	 1.0f, -1.0f,  1.0f,
+	-1.0f, -1.0f,  1.0f,
+	-1.0f, -1.0f, -1.0f,
+
+	-1.0f,  1.0f, -1.0f,
+	 1.0f,  1.0f, -1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f, -1.0f,	
+};
+
+struct CubeUbo {
+	f32 projection[16];
+	f32 model[16];
+};
+
+struct QuadUbo {
 	f32 translation[16];
 	f32 scale[16];
-} QuadUbo;
+};
 
-typedef struct {
+struct GlBackend {
+	u32 cube_program;
+	u32 cube_ubo;
+	u32 cube_vao;
+
 	u32 quad_program;
 	u32 quad_ubo;
 	u32 quad_vao;
@@ -18,7 +71,7 @@ typedef struct {
 	u32 text_vbo;
 	
 	u32 text_buffer_ssbo;
-} GlBackend;
+};
 
 u32 gl_compile_shader(const char* filename, GLenum type)
 {
@@ -103,6 +156,21 @@ Render::Context* platform_render_init(Windowing::Context* window, Arena* arena)
 	glDepthFunc(GL_LEQUAL);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+	// Cube rendering
+	gl->cube_program = gl_create_program("shaders/cube.vert", "shaders/cube.frag");
+
+	glGenVertexArrays(1, &gl->cube_vao);
+	glBindVertexArray(gl->cube_vao);
+
+	u32 cube_vbo;
+	glGenBuffers(1, &cube_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, cube_vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), cube_vertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void*)0);
+
+	gl->cube_ubo = gl_create_ubo(sizeof(CubeUbo), nullptr);
+
 	// Quad rendering
 	gl->quad_program = gl_create_program("shaders/quad.vert", "shaders/quad.frag");
 
@@ -156,6 +224,36 @@ void platform_render_update(Render::Context* renderer, Render::State* render_sta
 	// Gl render
 	glClearColor(0.9f, 0.9f, 0.9f, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// Draw cubes
+	glUseProgram(gl->cube_program);
+	u32 cube_ubo_block_index = glGetUniformBlockIndex(gl->cube_program, "ubo");
+	glBindBufferBase(GL_UNIFORM_BUFFER, 0, gl->cube_ubo);
+	glUniformBlockBinding(gl->cube_program, cube_ubo_block_index, 0);
+
+	CubeUbo cube_ubo = {};
+	f32 perspective[16] = {};
+	gmath_mat4_perspective(gmath_radians(75.0f), (f32)window->window_width / (f32)window->window_height, 0.05f, 100.0f, perspective);
+	f32 view[16] = {};
+	gmath_mat4_identity(view);
+	float up[3] = {0, 1, 0};
+	gmath_mat4_lookat(render_state->camera_position, render_state->camera_target, up, view);
+	gmath_mat4_mul(perspective, view, cube_ubo.projection);
+
+	for(u32 i = 0; i < render_state->cubes_len; i++)
+	{
+		f32* cube = render_state->cubes[i];
+		gmath_mat4_translation(render_state->cubes[i], cube_ubo.model);
+
+		glBindBuffer(GL_UNIFORM_BUFFER, gl->cube_ubo);
+		void* p_cube_ubo = glMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
+		memcpy(p_cube_ubo, &cube_ubo, sizeof(cube_ubo));
+		glUnmapBuffer(GL_UNIFORM_BUFFER);
+
+		// Draw
+		glBindVertexArray(gl->cube_vao);
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+	}
 
 	// Draw rects
 	glUseProgram(gl->quad_program);

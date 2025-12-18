@@ -20,5 +20,7 @@
 #include "base/sizes.h"
 #include "base/interpolate.h"
 #include "base/random.h"
+#include "base/vec3.h"
+#include "base/glmath.h"
 
 #endif

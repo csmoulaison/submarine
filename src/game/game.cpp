@@ -1,5 +1,4 @@
 /*
-
 Game Design: A turn based shooting game in 4 dimensions, inspired by Battleship.
 
 In the setup phase, you assign a position to your ship in 4 dimensions within a
@@ -20,7 +19,6 @@ On your turn, you can take 1 of 3 actions:
 You go back and forth like this with the computer, and each attack/slice is
 seen by the other player. The only information which is not shown to both 
 players is the position of the ships.
-	
 */
 
 #define MENU_ITEMS_LEN 5
@@ -62,6 +60,12 @@ struct Game {
 	// Menu data
 	i32 menu_selection;
 	float menu_activations[MENU_ITEMS_LEN];
+
+	// Camera
+	f32 camera_phi;
+	f32 camera_theta;
+	f32 camera_distance;
+	f32 camera_target_distance;
 };
 
 Game* game_init(Windowing::Context* window, Arena* program_arena) 
@@ -90,6 +94,11 @@ Game* game_init(Windowing::Context* window, Arena* program_arena)
 	game->action_button = Windowing::register_key(window, Windowing::Keycode::Space);
 
 	game->menu_selection = 0;
+
+	game->camera_phi = 1.1f;
+	game->camera_theta = 1.2f;
+	game->camera_distance = 15.0f;
+	game->camera_target_distance = 1.0f;
 
 	return game;
 }
@@ -128,6 +137,27 @@ void menu_update(Game* game, Windowing::Context* window, Render::Context* render
 }
 
 void session_update(Game* game, Windowing::Context* window, Render::Context* renderer) {
+	if(Windowing::button_down(window, game->left_button))
+		game->camera_theta += 5.0f * BASE_FRAME_LENGTH;
+	if(Windowing::button_down(window, game->right_button))
+		game->camera_theta -= 5.0f * BASE_FRAME_LENGTH;
+	if(Windowing::button_down(window, game->forward_button))
+		game->camera_phi -= 5.0f * BASE_FRAME_LENGTH;
+	if(Windowing::button_down(window, game->back_button))
+		game->camera_phi += 5.0f * BASE_FRAME_LENGTH;
+
+	if(game->camera_phi < 0.01f)
+		game->camera_phi = 0.01f;
+	if(game->camera_phi > 3.14f)
+		game->camera_phi = 3.14f;
+
+	if(game->camera_theta < 0.0f)
+		game->camera_theta += 3.14159f * 2.0f;
+	if(game->camera_theta > 3.14159f * 2.0f)
+		game->camera_theta -= 3.14159f * 2.0f;
+	if(game->camera_theta > 10.0f)
+		game->camera_theta = 0.0f;
+
 	game->menu_transition_t -= game->menu_transition_speed * BASE_FRAME_LENGTH;
 	if(game->menu_transition_t < 0.0f) game->menu_transition_t = 0.0f;
 
@@ -175,6 +205,26 @@ void game_update(Game* game, Windowing::Context* window, Render::Context* render
 	
 	game->frames_since_init++;
 	arena_clear(&game->frame_arena);
+
+	renderer->current_state.camera_position[0] = 
+		game->camera_distance * sin(game->camera_phi) * cos(game->camera_theta);
+	renderer->current_state.camera_position[1] = 
+		game->camera_distance * cos(game->camera_phi);
+	renderer->current_state.camera_position[2] = 
+		game->camera_distance * sin(game->camera_phi) * sin(game->camera_theta);
+	renderer->current_state.camera_target[0] = 0.0f;
+	renderer->current_state.camera_target[1] = 0.0f;
+	renderer->current_state.camera_target[2] = 0.0f;
+
+	renderer->current_state.cubes[0][0] = 0.0f;
+	renderer->current_state.cubes[0][1] = 0.0f;
+	renderer->current_state.cubes[0][2] = 0.0f;
+
+	renderer->current_state.cubes[1][0] = 2.0f;
+	renderer->current_state.cubes[1][1] = 3.0f;
+	renderer->current_state.cubes[1][2] = -2.0f;
+
+	renderer->current_state.cubes_len = 2;
 }
 
 bool game_close_requested(Game* game)
