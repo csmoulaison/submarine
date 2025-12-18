@@ -24,11 +24,17 @@ players is the position of the ships.
 */
 
 #define MENU_ITEMS_LEN 5
+const char* menu_strings[MENU_ITEMS_LEN] = {
+	"Resume",
+	"New Game",
+	"Controls",
+	"Settings",
+	"Quit"
+};
 
 enum class GameState {
 	Menu,
-	Session,
-	End
+	Session
 };
 
 struct Game {
@@ -39,8 +45,8 @@ struct Game {
 	GameState state;
 	bool close_requested;
 	u32 frames_since_init;
-	float state_transition_t;
-	float state_transition_speed;
+	float menu_transition_t;
+	float menu_transition_speed;
 
 	Windowing::ButtonHandle up_button;
 	Windowing::ButtonHandle down_button;
@@ -69,8 +75,8 @@ Game* game_init(Windowing::Context* window, Arena* program_arena)
 	game->state = GameState::Menu;
 	game->close_requested = false;
 	game->frames_since_init = 0;
-	game->state_transition_t = 0;
-	game->state_transition_speed = STATE_TRANSITION_SPEED;
+	game->menu_transition_t = 0;
+	game->menu_transition_speed = STATE_TRANSITION_SPEED;
 
 	game->up_button = Windowing::register_key(window, Windowing::Keycode::Q);
 	game->down_button = Windowing::register_key(window, Windowing::Keycode::E);
@@ -88,29 +94,53 @@ Game* game_init(Windowing::Context* window, Arena* program_arena)
 	return game;
 }
 
-void game_transition_state(Game* game, GameState new_state) {
-	game->state = new_state;
-	game->state_transition_t = 0.0f;
-	game->state_transition_speed = STATE_TRANSITION_SPEED;
-}
-
 void menu_update(Game* game, Windowing::Context* window, Render::Context* renderer) {
+	game->menu_transition_t += game->menu_transition_speed * BASE_FRAME_LENGTH;
+	if(game->menu_transition_t > 1.0f) game->menu_transition_t = 1.0f;
+
 	if(Windowing::button_pressed(window, game->back_button)) game->menu_selection++;
 	if(Windowing::button_pressed(window, game->forward_button)) game->menu_selection--;
 	if(game->menu_selection >= MENU_ITEMS_LEN) game->menu_selection = 0;
 	if(game->menu_selection < 0) game->menu_selection = MENU_ITEMS_LEN - 1;
 	
-	const char* menu_strings[MENU_ITEMS_LEN] = {
-		"Resume",
-		"New Game",
-		"Controls",
-		"Settings",
-		"Quit"
-	};
+	if(Windowing::button_pressed(window, game->action_button)) {
+		switch(game->menu_selection) {
+			case 0:
+				game->state = GameState::Session;
+				break;
+			case 1:
+				break;
+			case 2:
+				break;
+			case 3:
+				break;
+			case 4:
+				game->close_requested = true;
+				break;
+			default: 
+				panic();
+		}
+	}
 
+	if(Windowing::button_pressed(window, game->quit_button)) {
+		game->close_requested = true;
+	}
+}
+
+void session_update(Game* game, Windowing::Context* window, Render::Context* renderer) {
+	game->menu_transition_t -= game->menu_transition_speed * BASE_FRAME_LENGTH;
+	if(game->menu_transition_t < 0.0f) game->menu_transition_t = 0.0f;
+
+	if(Windowing::button_pressed(window, game->quit_button)) {
+		game->state = GameState::Menu;
+	}
+}
+
+void game_draw(Game* game, Windowing::Context* window, Render::Context* renderer) {
 	for(i8 i = 0; i < MENU_ITEMS_LEN; i++) {
 		float lower = i * 0.1f;
-		float transition_t = smoothstep(lower, lower + 0.75f, game->state_transition_t);
+		float upper = lower + 1.0f - MENU_ITEMS_LEN * 0.1f;
+		float transition_t = smoothstep(lower, lower + 0.5f, game->menu_transition_t);
 
 		if(game->menu_selection == i) {
 			game->menu_activations[i] += MENU_ACTIVATION_SPEED * BASE_FRAME_LENGTH;
@@ -125,45 +155,13 @@ void menu_update(Game* game, Windowing::Context* window, Render::Context* render
 			96.0f - 64.0f * (1.0f - transition_t) + activation_t * 32.0f,
 			window->window_height - 128.0f - i * 64.0f, 
 			0.0f, 1.0f, 
-			1.0f - activation_t * 0.5f, 1.0f - activation_t * 0.5f, 1.0f, transition_t, 
+			0.3f, 0.3f, 0.3f + activation_t * 0.5f, transition_t, 
 			FONT_FACE_SMALL);
-	}
-
-	if(Windowing::button_pressed(window, game->action_button)) {
-		game_transition_state(game, GameState::Session);
-	}
-}
-
-void session_update(Game* game, Windowing::Context* window, Render::Context* renderer) {
-	text_line(renderer, "Session?",
-		window->window_width / 2.0f, 
-		window->window_height / 2.0f, 
-		0.5f, 0.5f, 
-		1.0f, 1.0f, 1.0f, game->state_transition_t, 
-		FONT_FACE_SMALL);
-
-	if(Windowing::button_pressed(window, game->action_button)) {
-		game_transition_state(game, GameState::End);
-	}
-}
-
-void end_update(Game* game, Windowing::Context* window, Render::Context* renderer) {
-	text_line(renderer, "End...",
-		window->window_width / 2.0f, 
-		window->window_height / 2.0f, 
-		0.5f, 0.5f, 
-		1.0f, 1.0f, 1.0f, game->state_transition_t, 
-		FONT_FACE_SMALL);
-
-	if(Windowing::button_pressed(window, game->action_button)) {
-		game_transition_state(game, GameState::Menu);
 	}
 }
 
 void game_update(Game* game, Windowing::Context* window, Render::Context* renderer)
 {
-	game->state_transition_t += game->state_transition_speed * BASE_FRAME_LENGTH;
-	
 	switch(game->state) {
 		case GameState::Menu:
 			menu_update(game, window, renderer);
@@ -171,17 +169,12 @@ void game_update(Game* game, Windowing::Context* window, Render::Context* render
 		case GameState::Session:
 			session_update(game, window, renderer);
 			break;
-		case GameState::End:
-			end_update(game, window, renderer);
-			break;
 		default: break;
 	} 
+	game_draw(game, window, renderer);
+	
 	game->frames_since_init++;
 	arena_clear(&game->frame_arena);
-
-	if(Windowing::button_pressed(window, game->quit_button)) {
-		game->close_requested = true;
-	}
 }
 
 bool game_close_requested(Game* game)
