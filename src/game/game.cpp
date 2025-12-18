@@ -46,6 +46,9 @@ struct Game {
 	float menu_transition_t;
 	float menu_transition_speed;
 
+	// Session
+	i32 selection_index;
+
 	Windowing::ButtonHandle up_button;
 	Windowing::ButtonHandle down_button;
 	Windowing::ButtonHandle left_button;
@@ -54,18 +57,29 @@ struct Game {
 	Windowing::ButtonHandle back_button;
 	Windowing::ButtonHandle ana_button;
 	Windowing::ButtonHandle kata_button;
+
+	Windowing::ButtonHandle pitch_up_button;
+	Windowing::ButtonHandle pitch_down_button;
+	Windowing::ButtonHandle yaw_up_button;
+	Windowing::ButtonHandle yaw_down_button;
+
 	Windowing::ButtonHandle quit_button;
 	Windowing::ButtonHandle action_button;
 
 	// Menu data
 	i32 menu_selection;
 	float menu_activations[MENU_ITEMS_LEN];
+	float menu_flashes[MENU_ITEMS_LEN];
 
 	// Camera
 	f32 camera_phi;
 	f32 camera_theta;
 	f32 camera_distance;
 	f32 camera_target_distance;
+
+	// Cubes
+	f32 cube_idle_positions[27][3];
+	f32 cube_idle_orientations[27][3];
 };
 
 Game* game_init(Windowing::Context* window, Arena* program_arena) 
@@ -79,8 +93,10 @@ Game* game_init(Windowing::Context* window, Arena* program_arena)
 	game->state = GameState::Menu;
 	game->close_requested = false;
 	game->frames_since_init = 0;
-	game->menu_transition_t = 0;
+	game->menu_transition_t = 1;
 	game->menu_transition_speed = STATE_TRANSITION_SPEED;
+
+	game->selection_index = 0;
 
 	game->up_button = Windowing::register_key(window, Windowing::Keycode::Q);
 	game->down_button = Windowing::register_key(window, Windowing::Keycode::E);
@@ -90,15 +106,35 @@ Game* game_init(Windowing::Context* window, Arena* program_arena)
 	game->back_button = Windowing::register_key(window, Windowing::Keycode::S);
 	game->ana_button = Windowing::register_key(window, Windowing::Keycode::X);
 	game->kata_button = Windowing::register_key(window, Windowing::Keycode::Z);
+
+	game->pitch_up_button = Windowing::register_key(window, Windowing::Keycode::Up);
+	game->pitch_down_button = Windowing::register_key(window, Windowing::Keycode::Down);
+	game->yaw_up_button = Windowing::register_key(window, Windowing::Keycode::Left);
+	game->yaw_down_button = Windowing::register_key(window, Windowing::Keycode::Right);
+
 	game->quit_button = Windowing::register_key(window, Windowing::Keycode::Escape);
 	game->action_button = Windowing::register_key(window, Windowing::Keycode::Space);
 
 	game->menu_selection = 0;
+	for(i32 i = 0; i > MENU_ITEMS_LEN; i++) {
+		game->menu_activations[i] = 0;
+		game->menu_flashes[i] = 0;
+	}
 
 	game->camera_phi = 1.1f;
 	game->camera_theta = 1.2f;
-	game->camera_distance = 15.0f;
+	game->camera_distance = 10.0f;
 	game->camera_target_distance = 1.0f;
+
+	for(i32 i = 0; i < 27; i++) {
+		game->cube_idle_positions[i][0] = random_f32() * 20.0f - 10.0f;
+		game->cube_idle_positions[i][1] = random_f32() * 20.0f - 10.0f;
+		game->cube_idle_positions[i][2] = random_f32() * 20.0f - 10.0f;
+
+		game->cube_idle_orientations[i][0] = random_f32() * 1.0f;
+		game->cube_idle_orientations[i][1] = random_f32() * 1.0f;
+		game->cube_idle_orientations[i][2] = random_f32() * 1.0f;
+	}
 
 	return game;
 }
@@ -107,10 +143,19 @@ void menu_update(Game* game, Windowing::Context* window, Render::Context* render
 	game->menu_transition_t += game->menu_transition_speed * BASE_FRAME_LENGTH;
 	if(game->menu_transition_t > 1.0f) game->menu_transition_t = 1.0f;
 
-	if(Windowing::button_pressed(window, game->back_button)) game->menu_selection++;
-	if(Windowing::button_pressed(window, game->forward_button)) game->menu_selection--;
+	bool flash = false;
+	if(Windowing::button_pressed(window, game->back_button)) {
+		game->menu_selection++;
+		flash = true;
+	}
+	if(Windowing::button_pressed(window, game->forward_button)) {
+		game->menu_selection--;
+		flash = true;
+	}
 	if(game->menu_selection >= MENU_ITEMS_LEN) game->menu_selection = 0;
 	if(game->menu_selection < 0) game->menu_selection = MENU_ITEMS_LEN - 1;
+
+	if(flash) game->menu_flashes[game->menu_selection] = 1.0f;
 	
 	if(Windowing::button_pressed(window, game->action_button)) {
 		switch(game->menu_selection) {
@@ -129,34 +174,38 @@ void menu_update(Game* game, Windowing::Context* window, Render::Context* render
 			default: 
 				panic();
 		}
+		game->menu_flashes[game->menu_selection] = 2.0f;
 	}
 
 	if(Windowing::button_pressed(window, game->quit_button)) {
-		game->close_requested = true;
+		game->state = GameState::Session;
 	}
 }
 
 void session_update(Game* game, Windowing::Context* window, Render::Context* renderer) {
-	if(Windowing::button_down(window, game->left_button))
+	if(Windowing::button_down(window, game->yaw_up_button))
 		game->camera_theta += 5.0f * BASE_FRAME_LENGTH;
-	if(Windowing::button_down(window, game->right_button))
+	if(Windowing::button_down(window, game->yaw_down_button))
 		game->camera_theta -= 5.0f * BASE_FRAME_LENGTH;
-	if(Windowing::button_down(window, game->forward_button))
+	if(Windowing::button_down(window, game->pitch_up_button))
 		game->camera_phi -= 5.0f * BASE_FRAME_LENGTH;
-	if(Windowing::button_down(window, game->back_button))
+	if(Windowing::button_down(window, game->pitch_down_button))
 		game->camera_phi += 5.0f * BASE_FRAME_LENGTH;
-
 	if(game->camera_phi < 0.01f)
 		game->camera_phi = 0.01f;
 	if(game->camera_phi > 3.14f)
 		game->camera_phi = 3.14f;
-
 	if(game->camera_theta < 0.0f)
 		game->camera_theta += 3.14159f * 2.0f;
 	if(game->camera_theta > 3.14159f * 2.0f)
 		game->camera_theta -= 3.14159f * 2.0f;
 	if(game->camera_theta > 10.0f)
 		game->camera_theta = 0.0f;
+
+	if(Windowing::button_pressed(window, game->up_button))
+		game->selection_index += 3;
+	if(Windowing::button_pressed(window, game->down_button))
+		game->selection_index -= 3;
 
 	game->menu_transition_t -= game->menu_transition_speed * BASE_FRAME_LENGTH;
 	if(game->menu_transition_t < 0.0f) game->menu_transition_t = 0.0f;
@@ -181,12 +230,15 @@ void game_draw(Game* game, Windowing::Context* window, Render::Context* renderer
 		}
 		float activation_t = smoothstep(0.0f, 1.0f, game->menu_activations[i]);
 
+		game->menu_flashes[i] -= MENU_FLASH_SPEED * BASE_FRAME_LENGTH;
+		if(game->menu_flashes[i] < 0.0f) game->menu_flashes[i] = 0.0f;
+
 		text_line(renderer, menu_strings[i], 
-			96.0f - 64.0f * (1.0f - transition_t) + activation_t * 32.0f,
-			window->window_height - 128.0f - i * 64.0f, 
+			200.0f - 200.0f * (1.0f - transition_t) + activation_t * 50.0f,
+			window->window_height - 200.0f - i * 100.0f, 
 			0.0f, 1.0f, 
-			0.3f, 0.3f, 0.3f + activation_t * 0.5f, transition_t, 
-			FONT_FACE_SMALL);
+			0.4f + game->menu_flashes[i] * 0.3f, 0.4f + game->menu_flashes[i] * 0.3f, 0.4f + activation_t * 0.4f + game->menu_flashes[i] * 0.3f, transition_t, 
+			FONT_FACE_LARGE);
 	}
 }
 
@@ -216,15 +268,46 @@ void game_update(Game* game, Windowing::Context* window, Render::Context* render
 	renderer->current_state.camera_target[1] = 0.0f;
 	renderer->current_state.camera_target[2] = 0.0f;
 
-	renderer->current_state.cubes[0][0] = 0.0f;
-	renderer->current_state.cubes[0][1] = 0.0f;
-	renderer->current_state.cubes[0][2] = 0.0f;
+	f32 smooth_t = smoothstep(0.0f, 1.0f, game->menu_transition_t);
+	float dist = 1.5f;
+	for(i32 i = 0; i < 27; i++) {
+		Render::Cube* cube = &renderer->current_state.cubes[i];
+		i32 x = i % 3;
+		i32 y = i / 3 % 3;
+		i32 z = i / 9;
 
-	renderer->current_state.cubes[1][0] = 2.0f;
-	renderer->current_state.cubes[1][1] = 3.0f;
-	renderer->current_state.cubes[1][2] = -2.0f;
+		cube->position[0] = -dist + (f32)x * dist;
+		cube->position[1] = -dist + (f32)y * dist;
+		cube->position[2] = -dist + (f32)z * dist;
 
-	renderer->current_state.cubes_len = 2;
+		cube->position[0] = lerp(cube->position[0], game->cube_idle_positions[i][0], smooth_t);
+		cube->position[1] = lerp(cube->position[1], game->cube_idle_positions[i][1], smooth_t);
+		cube->position[2] = lerp(cube->position[2], game->cube_idle_positions[i][2], smooth_t);
+
+		cube->orientation[0] = 0.0f;
+		cube->orientation[1] = 0.0f;
+		cube->orientation[2] = 0.0f;
+
+		cube->orientation[0] = lerp(cube->orientation[0], game->cube_idle_orientations[i][0], smooth_t);
+		cube->orientation[1] = lerp(cube->orientation[1], game->cube_idle_orientations[i][1], smooth_t);
+		cube->orientation[2] = lerp(cube->orientation[2], game->cube_idle_orientations[i][2], smooth_t);
+
+
+		float selected_mod = 0.0f;
+		if(i == game->selection_index) selected_mod = 1.0f;
+
+		cube->color[0] = 0.8f + selected_mod * 0.2f;
+		cube->color[1] = 0.8f - selected_mod * 0.2f;
+		cube->color[2] = 0.8f - selected_mod * 0.2f;
+		cube->color[3] = 0.6f - smooth_t * 0.4f + selected_mod * 0.25f;
+	}
+
+	renderer->current_state.cubes_len = 27;
+
+	renderer->current_state.clear_color[0] = 0.9f;
+	renderer->current_state.clear_color[1] = 0.9f;
+	renderer->current_state.clear_color[2] = 0.9f;
+
 }
 
 bool game_close_requested(Game* game)

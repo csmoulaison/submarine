@@ -3,7 +3,7 @@
 
 #include "base/base.h"
 
-#define MAX_PLATFORM_BUTTONS 8
+#define MAX_PLATFORM_BUTTONS 16
 
 #define INPUT_DOWN_BIT     0b00000001
 #define INPUT_PRESSED_BIT  0b00000010

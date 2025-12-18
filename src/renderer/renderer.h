@@ -5,7 +5,7 @@
 #include "window/window.h"
 
 #define MAX_RENDER_RECTS 16
-#define MAX_RENDER_CUBES 16
+#define MAX_RENDER_CUBES 32
 #define MAX_FONT_GLYPHS 128
 #define MAX_RENDER_CHARS 1024
 
@@ -50,11 +50,19 @@ namespace Render {
 		Character characters[MAX_RENDER_CHARS];
 	};
 
+	struct Cube {
+		f32 position[3];
+		f32 orientation[3];
+		f32 color[4];
+	};
+
 	struct State {
+		f32 clear_color[3];
+
 		f32 camera_position[3];
 		f32 camera_target[3];
 
-		f32 cubes[MAX_RENDER_CUBES][3];
+		Cube cubes[MAX_RENDER_CUBES];
 		u8 cubes_len;
 
 		Rect rects[MAX_RENDER_RECTS];

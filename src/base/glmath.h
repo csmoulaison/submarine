@@ -6,6 +6,7 @@ void gmath_mat4_perspective(f32 fovy, f32 aspect, f32 zfar, f32 znear, f32* res)
 void gmath_mat4_lookat(f32* origin, f32* target, f32* up, f32* res);
 void gmath_mat4_mul(f32* a, f32* b, f32* res);
 void gmath_mat4_translation(f32* v, f32* res);
+void gmath_mat4_rotation(f32 angle, f32* axis, f32* res);
 f32 gmath_radians(f32 degrees);
 
 #ifdef CSM_BASE_IMPLEMENTATION
@@ -37,18 +38,18 @@ void gmath_mat4_perspective(f32 fovy, f32 aspect, f32 zfar, f32 znear, f32* res)
 }
 
 void gmath_mat4_lookat(f32* origin, f32* target, f32* up, f32* res) {
-	float dir[3] = { 
+	f32 dir[3] = { 
 		target[0] - origin[0],
 		target[1] - origin[1],
 		target[2] - origin[2]
 	};
-	float f[3];
-	float u[3]; 
-	float s[3]; 
+	f32 f[3];
+	f32 u[3]; 
+	f32 s[3]; 
 	v3_normalize(dir, f);
 	v3_normalize(up, u);
 
-	float cross_fu[3];
+	f32 cross_fu[3];
 	v3_cross(f, u, cross_fu);
 
 	v3_normalize(cross_fu, s);
@@ -137,6 +138,36 @@ void gmath_mat4_translation(f32* v, f32* res) {
 	res[12] = v[0];
 	res[13] = v[1];
 	res[14] = v[2];
+}
+
+void gmath_mat4_rotation(f32 angle, f32* axis, f32* res) {
+	f32 normal_axis[3];
+	v3_normalize(axis, normal_axis);
+
+	f32 c = cos(angle);
+	f32 s = sin(angle);
+	f32 omc = 1.0f - c;
+	f32 x = axis[0];
+	f32 y = axis[1];
+	f32 z = axis[2];
+
+	gmath_mat4_identity(res);
+	res[0] = x * x * omc + c;
+	res[1] = y * x * omc + z * s;
+	res[2] = z * x * omc - y * s;
+	res[3] = 0.0f;
+	res[4] = x * y * omc - z * s;
+	res[5] = y * y * omc + c;
+	res[6] = z * y * omc + x * s;
+	res[7] = 0.0f;
+	res[8] = x * z * omc + y * s;
+	res[9] = y * z * omc - x * s;
+	res[10] = z * z * omc + c;
+	res[11] = 0.0f;
+	res[12] = 0.0f;
+	res[13] = 0.0f;
+	res[14] = 0.0f;
+	res[15] = 1.0f;
 }
 
 #endif // CSM_BASE_IMPLEMENTATION

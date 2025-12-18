@@ -50,6 +50,7 @@ const float cube_vertices[] =
 struct CubeUbo {
 	f32 projection[16];
 	f32 model[16];
+	f32 color[4];
 };
 
 struct QuadUbo {
@@ -222,7 +223,11 @@ void platform_render_update(Render::Context* renderer, Render::State* render_sta
 	}
 	
 	// Gl render
-	glClearColor(0.9f, 0.9f, 0.9f, 1);
+	glClearColor(
+		render_state->clear_color[0], 
+		render_state->clear_color[1], 
+		render_state->clear_color[2], 
+		1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Draw cubes
@@ -242,8 +247,16 @@ void platform_render_update(Render::Context* renderer, Render::State* render_sta
 
 	for(u32 i = 0; i < render_state->cubes_len; i++)
 	{
-		f32* cube = render_state->cubes[i];
-		gmath_mat4_translation(render_state->cubes[i], cube_ubo.model);
+		Render::Cube* cube = &render_state->cubes[i];
+		cube_ubo.color[0] = cube->color[0];
+		cube_ubo.color[1] = cube->color[1];
+		cube_ubo.color[2] = cube->color[2];
+		cube_ubo.color[3] = cube->color[3];
+
+		gmath_mat4_translation(cube->position, cube_ubo.model);
+		f32 rotation[16];
+		gmath_mat4_rotation(1.0f, cube->orientation, rotation);
+		gmath_mat4_mul(cube_ubo.model, rotation, cube_ubo.model);
 
 		glBindBuffer(GL_UNIFORM_BUFFER, gl->cube_ubo);
 		void* p_cube_ubo = glMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
@@ -293,6 +306,7 @@ void platform_render_update(Render::Context* renderer, Render::State* render_sta
 	}
 
 	// Text rendering
+	glDisable(GL_DEPTH_TEST);
 	glUseProgram(gl->text_program);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(gl->quad_vao);
@@ -322,6 +336,7 @@ void platform_render_update(Render::Context* renderer, Render::State* render_sta
 		glBindTexture(GL_TEXTURE_2D, font->texture_id);
 		glDrawArraysInstanced(GL_TRIANGLES, 0, 6, list->characters_len);
 	}
+	glEnable(GL_DEPTH_TEST);
 
 	// Unbind stuff
 	glBindVertexArray(0);
