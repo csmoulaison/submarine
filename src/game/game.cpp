@@ -177,7 +177,7 @@ Game* game_init(Windowing::Context* window, Arena* program_arena)
 
 	game->camera_phi = 1.1f;
 	game->camera_theta = 1.2f;
-	game->camera_distance = 2.5f * GRID_LENGTH;
+	game->camera_distance = 3.0f * GRID_LENGTH;
 	game->camera_target_distance = 1.0f;
 
 	for(i32 i = 0; i < GRID_VOLUME; i++) {
@@ -390,10 +390,10 @@ void game_update(Game* game, Windowing::Context* window, Render::Context* render
 		cube->orientation[2] = lerp(cube->orientation[2], game->cube_idle_orientations[cube_index][2], smooth_t);
 
 		f32* color_target = game->cube_color_targets[cube_index];
-		color_target[0] = 0.6f;
-		color_target[1] = 0.6f;
-		color_target[2] = 0.8f;
-		color_target[3] = 0.0f + (v3_distance(cube->position, renderer->current_state.camera_position) - game->camera_distance / 2.0f) * 0.008f - smooth_t * 0.1f;
+		color_target[0] = 0.0f;
+		color_target[1] = 0.0f;
+		color_target[2] = 0.0f;
+		color_target[3] = 0.0f + (v3_distance(cube->position, renderer->current_state.camera_position) - game->camera_distance / 2.0f) * 0.01f - smooth_t * 0.1f;
 
 		switch(game->game_type) {
 			case GameType::Submarine:
